@@ -1,0 +1,88 @@
+autoinstall:
+  version: 1
+  identity:
+    hostname: ubuntu-lvm-efi-250go
+    username: monuser
+    password: "$6$rounds=4096$6swV9WZlT47q0zKx$Uy2aW/6ITLy4coymqmjJ4LwcoBRqz4gAVipNGnFNhfjvznPPEhTn1YiN8kGGzR6jKoapj8n0xRrJmu5Fv7VT7z0"
+  locale: fr_FR.UTF-8
+  keyboard:
+    layout: fr
+  network:
+    version: 2
+    ethernets:
+      eth0:
+        dhcp4: true
+  storage:
+    config:
+      - type: disk
+        id: disk0
+        match:
+          size: 250G
+        wipe: superblock-recursive
+        preserve: false
+        grub_device: true
+        ptable: gpt
+        layout: false
+        children:
+          - type: partition
+            id: part-efi
+            size: 1024M
+            flag: [ esp ]
+            fs_type: fat32
+          - type: partition
+            id: part-lvm
+            size: -1
+            flag: ''
+      - type: physical_volume
+        id: pv0
+        device: part-lvm
+      - type: volume_group
+        id: vg0
+        name: vgubuntu
+        devices:
+          - pv0
+      - type: logical_volume
+        id: lvroot
+        name: root
+        size: 60G
+        volume_group: vg0
+        fs_type: ext4
+        mount_point: /
+      - type: logical_volume
+        id: lvhome
+        name: home
+        size: 100G
+        volume_group: vg0
+        fs_type: ext4
+        mount_point: /home
+      - type: logical_volume
+        id: lvvar
+        name: var
+        size: 40G
+        volume_group: vg0
+        fs_type: ext4
+        mount_point: /var
+      - type: logical_volume
+        id: lvtmp
+        name: tmp
+        size: 20G
+        volume_group: vg0
+        fs_type: ext4
+        mount_point: /tmp
+      - type: logical_volume
+        id: lvswap
+        name: swap
+        size: 9G
+        volume_group: vg0
+        fs_type: swap
+  packages:
+    - vim
+    - glances
+    - htop
+    - curl
+    - git
+  user-data:
+    disable_root: false
+  late-commands:
+    - curtin in-target --target=/target -- apt-get update
+    - curtin in-target --target=/target -- apt-get upgrade -y
