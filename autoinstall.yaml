@@ -1,8 +1,8 @@
 autoinstall:
   version: 1
   identity:
-    hostname: ubuntu-lvm-efi-250go
-    username: monuser
+    hostname: tuxor
+    username: tech
     password: "$6$rounds=4096$6swV9WZlT47q0zKx$Uy2aW/6ITLy4coymqmjJ4LwcoBRqz4gAVipNGnFNhfjvznPPEhTn1YiN8kGGzR6jKoapj8n0xRrJmu5Fv7VT7z0"
   locale: fr_FR.UTF-8
   keyboard:
