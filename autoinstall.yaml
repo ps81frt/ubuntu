@@ -29,6 +29,7 @@ autoinstall:
             size: 1024M
             flag: [ esp ]
             fs_type: fat32
+            mount_point: /boot/efi
           - type: partition
             id: part-lvm
             size: -1
@@ -83,8 +84,6 @@ autoinstall:
     - git
     - open-vm-tools
     - open-vm-tools-desktop
-  user-data:
-    disable_root: false
   late-commands:
     - curtin in-target --target=/target -- apt-get update
     - curtin in-target --target=/target -- apt-get upgrade -y
