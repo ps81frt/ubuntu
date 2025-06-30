@@ -81,6 +81,8 @@ autoinstall:
     - htop
     - curl
     - git
+    - open-vm-tools
+    - open-vm-tools-desktop
   user-data:
     disable_root: false
   late-commands:
