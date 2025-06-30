@@ -1,67 +1,53 @@
 #!/bin/bash
 set -e
 
-# Variables
-DISK="/dev/sda"           # disque principal, adapte si besoin
+DISK="/dev/sda"
 VG_NAME="ubuntu-vg"
 LV_HOME="lvhome"
 LV_VAR="lvvar"
 LV_TMP="lvtmp"
 
-# 0. Vérifier que la partition EFI est montée
-if ! mountpoint -q /boot/efi; then
-  echo "Montage de la partition EFI..."
-  mount /boot/efi
-else
-  echo "La partition EFI est déjà montée."
-fi
+# Démontage des partitions montées (adapte les partitions si besoin)
+sudo umount -l ${DISK}1
+sudo umount -l ${DISK}2
+sudo umount -l ${DISK}3
 
-# 1. Créer une partition LVM (si besoin)
-parted --script $DISK \
-  mkpart primary 1024MiB 100% \
-  set 2 lvm on
+# Créer la table de partitions GPT (attention, efface tout)
+sudo parted --script $DISK mklabel gpt
 
-# 2. Créer PV, VG, et LVs (à commenter si VG déjà existant)
-pvcreate ${DISK}2
-vgcreate $VG_NAME ${DISK}2
+# Créer partition EFI 1024MiB
+sudo parted --script $DISK mkpart ESP fat32 1MiB 1025MiB
+sudo parted --script $DISK set 1 boot on
+sudo parted --script $DISK set 1 esp on
 
-lvcreate -L 100G -n $LV_HOME $VG_NAME
-lvcreate -L 40G -n $LV_VAR $VG_NAME
-lvcreate -L 20G -n $LV_TMP $VG_NAME
+# Créer partition LVM pour le reste du disque
+sudo parted --script $DISK mkpart primary 1025MiB 100%
+sudo parted --script $DISK set 2 lvm on
 
-# 3. Formater les volumes
-mkfs.ext4 /dev/$VG_NAME/$LV_HOME
-mkfs.ext4 /dev/$VG_NAME/$LV_VAR
-mkfs.ext4 /dev/$VG_NAME/$LV_TMP
+# Formater la partition EFI
+sudo mkfs.vfat -F32 ${DISK}1
 
-# 4. Monter temporairement
-mkdir -p /mnt/lvhome /mnt/lvvar /mnt/lvtmp
-mount /dev/$VG_NAME/$LV_HOME /mnt/lvhome
-mount /dev/$VG_NAME/$LV_VAR /mnt/lvvar
-mount /dev/$VG_NAME/$LV_TMP /mnt/lvtmp
+# Préparer LVM
+sudo pvcreate ${DISK}2
+sudo vgcreate $VG_NAME ${DISK}2
 
-# 5. Copier les données actuelles
-echo "Copie des données vers LVM..."
-rsync -aXS --progress /home/ /mnt/lvhome/
-rsync -aXS --progress /var/ /mnt/lvvar/
-rsync -aXS --progress /tmp/ /mnt/lvtmp/
+sudo lvcreate -L 100G -n $LV_HOME $VG_NAME
+sudo lvcreate -L 40G -n $LV_VAR $VG_NAME
+sudo lvcreate -L 20G -n $LV_TMP $VG_NAME
+sudo lvcreate -L 9G -n lvswap $VG_NAME
 
-# 6. Sauvegarder fstab
-cp /etc/fstab /etc/fstab.bak
+# Formater les volumes logiques
+sudo mkfs.ext4 /dev/$VG_NAME/$LV_HOME
+sudo mkfs.ext4 /dev/$VG_NAME/$LV_VAR
+sudo mkfs.ext4 /dev/$VG_NAME/$LV_TMP
+sudo mkswap /dev/$VG_NAME/lvswap
 
-# 7. Ajouter entrées LVM dans fstab
-echo "/dev/$VG_NAME/$LV_HOME /home ext4 defaults 0 2" >> /etc/fstab
-echo "/dev/$VG_NAME/$LV_VAR /var ext4 defaults 0 2" >> /etc/fstab
-echo "/dev/$VG_NAME/$LV_TMP /tmp ext4 defaults 0 2" >> /etc/fstab
+# Monter les partitions
+sudo mkdir -p /mnt/boot/efi /mnt/home /mnt/var /mnt/tmp
+sudo mount ${DISK}1 /mnt/boot/efi
+sudo mount /dev/$VG_NAME/$LV_HOME /mnt/home
+sudo mount /dev/$VG_NAME/$LV_VAR /mnt/var
+sudo mount /dev/$VG_NAME/$LV_TMP /mnt/tmp
+sudo swapon /dev/$VG_NAME/lvswap
 
-# 8. Démonter les points temporaires
-umount /mnt/lvhome /mnt/lvvar /mnt/lvtmp
-
-# 9. Monter les nouveaux volumes
-mount /home
-mount /var
-mount /tmp
-
-echo "Configuration LVM terminée. Pense à redémarrer le système."
-
-exit 0
+echo "Partitionnement, LVM, formatage et montage terminés."
