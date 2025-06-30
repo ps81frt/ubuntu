@@ -1,53 +1,55 @@
 #!/bin/bash
+# ============================================================================
+# Auteur : ps81frt
+# Déplace /home, /var et /tmp sur des volumes LVM séparés et supprime les anciens
+# ============================================================================
+
 set -e
 
-DISK="/dev/sda"
+# Variables
 VG_NAME="ubuntu-vg"
 LV_HOME="lvhome"
 LV_VAR="lvvar"
 LV_TMP="lvtmp"
 
-# Démontage des partitions montées (adapte les partitions si besoin)
-sudo umount -l ${DISK}1
-sudo umount -l ${DISK}2
-sudo umount -l ${DISK}3
+# Créer les volumes logiques
+lvcreate -L 100G -n $LV_HOME $VG_NAME
+lvcreate -L 40G  -n $LV_VAR  $VG_NAME
+lvcreate -L 20G  -n $LV_TMP  $VG_NAME
 
-# Créer la table de partitions GPT (attention, efface tout)
-sudo parted --script $DISK mklabel gpt
+# Formater
+mkfs.ext4 /dev/$VG_NAME/$LV_HOME
+mkfs.ext4 /dev/$VG_NAME/$LV_VAR
+mkfs.ext4 /dev/$VG_NAME/$LV_TMP
 
-# Créer partition EFI 1024MiB
-sudo parted --script $DISK mkpart ESP fat32 1MiB 1025MiB
-sudo parted --script $DISK set 1 boot on
-sudo parted --script $DISK set 1 esp on
+# Monter temporairement
+mkdir -p /mnt/home /mnt/var /mnt/tmp
+mount /dev/$VG_NAME/$LV_HOME /mnt/home
+mount /dev/$VG_NAME/$LV_VAR  /mnt/var
+mount /dev/$VG_NAME/$LV_TMP  /mnt/tmp
 
-# Créer partition LVM pour le reste du disque
-sudo parted --script $DISK mkpart primary 1025MiB 100%
-sudo parted --script $DISK set 2 lvm on
+# Copier les données
+rsync -aAX /home/ /mnt/home/
+rsync -aAX /var/  /mnt/var/
+rsync -aAX /tmp/  /mnt/tmp/
 
-# Formater la partition EFI
-sudo mkfs.vfat -F32 ${DISK}1
+# Vérifier que la copie s’est bien faite (exemple sur /home)
+if [ -f /home/$USER/.bashrc ] && [ -f /mnt/home/$USER/.bashrc ]; then
+    echo "Copie réussie, suppression des anciens dossiers..."
+    rm -rf /home/*
+    rm -rf /var/*
+    rm -rf /tmp/*
+else
+    echo "Erreur : les données n'ont pas été copiées correctement. Abandon."
+    exit 1
+fi
 
-# Préparer LVM
-sudo pvcreate ${DISK}2
-sudo vgcreate $VG_NAME ${DISK}2
+# Sauvegarde fstab
+cp /etc/fstab /etc/fstab.bak
 
-sudo lvcreate -L 100G -n $LV_HOME $VG_NAME
-sudo lvcreate -L 40G -n $LV_VAR $VG_NAME
-sudo lvcreate -L 20G -n $LV_TMP $VG_NAME
-sudo lvcreate -L 9G -n lvswap $VG_NAME
+# Ajouter les entrées au fstab
+echo "/dev/mapper/${VG_NAME}-${LV_HOME} /home ext4 defaults 0 2" >> /etc/fstab
+echo "/dev/mapper/${VG_NAME}-${LV_VAR}  /var  ext4 defaults 0 2" >> /etc/fstab
+echo "/dev/mapper/${VG_NAME}-${LV_TMP}  /tmp  ext4 defaults 0 2" >> /etc/fstab
 
-# Formater les volumes logiques
-sudo mkfs.ext4 /dev/$VG_NAME/$LV_HOME
-sudo mkfs.ext4 /dev/$VG_NAME/$LV_VAR
-sudo mkfs.ext4 /dev/$VG_NAME/$LV_TMP
-sudo mkswap /dev/$VG_NAME/lvswap
-
-# Monter les partitions
-sudo mkdir -p /mnt/boot/efi /mnt/home /mnt/var /mnt/tmp
-sudo mount ${DISK}1 /mnt/boot/efi
-sudo mount /dev/$VG_NAME/$LV_HOME /mnt/home
-sudo mount /dev/$VG_NAME/$LV_VAR /mnt/var
-sudo mount /dev/$VG_NAME/$LV_TMP /mnt/tmp
-sudo swapon /dev/$VG_NAME/lvswap
-
-echo "Partitionnement, LVM, formatage et montage terminés."
+echo "Terminé. Redémarre pour utiliser les nouveaux volumes LVM."
