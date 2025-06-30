@@ -1,36 +1,67 @@
-# Créer les volumes (taille à adapter)
-sudo lvcreate -L 100G -n lvhome vgubuntu
-sudo lvcreate -L 40G -n lvvar vgubuntu
-sudo lvcreate -L 20G -n lvtmp vgubuntu
+#!/bin/bash
+set -e
 
-# Formater les volumes
-sudo mkfs.ext4 /dev/vgubuntu/lvhome
-sudo mkfs.ext4 /dev/vgubuntu/lvvar
-sudo mkfs.ext4 /dev/vgubuntu/lvtmp
+# Variables
+DISK="/dev/sda"           # disque principal, adapte si besoin
+VG_NAME="ubuntu-vg"
+LV_HOME="lvhome"
+LV_VAR="lvvar"
+LV_TMP="lvtmp"
 
-# Monter temporairement
-sudo mkdir /mnt/lvhome /mnt/lvvar /mnt/lvtmp
-sudo mount /dev/vgubuntu/lvhome /mnt/lvhome
-sudo mount /dev/vgubuntu/lvvar /mnt/lvvar
-sudo mount /dev/vgubuntu/lvtmp /mnt/lvtmp
+# 0. Vérifier que la partition EFI est montée
+if ! mountpoint -q /boot/efi; then
+  echo "Montage de la partition EFI..."
+  mount /boot/efi
+else
+  echo "La partition EFI est déjà montée."
+fi
 
-# Copier les données
-sudo rsync -aXS --progress /home/ /mnt/lvhome/
-sudo rsync -aXS --progress /var/ /mnt/lvvar/
-sudo rsync -aXS --progress /tmp/ /mnt/lvtmp/
+# 1. Créer une partition LVM (si besoin)
+parted --script $DISK \
+  mkpart primary 1024MiB 100% \
+  set 2 lvm on
 
-# Sauvegarder fstab
-sudo cp /etc/fstab /etc/fstab.bak
+# 2. Créer PV, VG, et LVs (à commenter si VG déjà existant)
+pvcreate ${DISK}2
+vgcreate $VG_NAME ${DISK}2
 
-# Ajouter les volumes dans fstab
-echo '/dev/vgubuntu/lvhome /home ext4 defaults 0 2' | sudo tee -a /etc/fstab
-echo '/dev/vgubuntu/lvvar /var ext4 defaults 0 2' | sudo tee -a /etc/fstab
-echo '/dev/vgubuntu/lvtmp /tmp ext4 defaults 0 2' | sudo tee -a /etc/fstab
+lvcreate -L 100G -n $LV_HOME $VG_NAME
+lvcreate -L 40G -n $LV_VAR $VG_NAME
+lvcreate -L 20G -n $LV_TMP $VG_NAME
 
-# Démonter points temporaires
-sudo umount /mnt/lvhome /mnt/lvvar /mnt/lvtmp
+# 3. Formater les volumes
+mkfs.ext4 /dev/$VG_NAME/$LV_HOME
+mkfs.ext4 /dev/$VG_NAME/$LV_VAR
+mkfs.ext4 /dev/$VG_NAME/$LV_TMP
 
-# Monter les nouveaux points
-sudo mount /home
-sudo mount /var
-sudo mount /tmp
+# 4. Monter temporairement
+mkdir -p /mnt/lvhome /mnt/lvvar /mnt/lvtmp
+mount /dev/$VG_NAME/$LV_HOME /mnt/lvhome
+mount /dev/$VG_NAME/$LV_VAR /mnt/lvvar
+mount /dev/$VG_NAME/$LV_TMP /mnt/lvtmp
+
+# 5. Copier les données actuelles
+echo "Copie des données vers LVM..."
+rsync -aXS --progress /home/ /mnt/lvhome/
+rsync -aXS --progress /var/ /mnt/lvvar/
+rsync -aXS --progress /tmp/ /mnt/lvtmp/
+
+# 6. Sauvegarder fstab
+cp /etc/fstab /etc/fstab.bak
+
+# 7. Ajouter entrées LVM dans fstab
+echo "/dev/$VG_NAME/$LV_HOME /home ext4 defaults 0 2" >> /etc/fstab
+echo "/dev/$VG_NAME/$LV_VAR /var ext4 defaults 0 2" >> /etc/fstab
+echo "/dev/$VG_NAME/$LV_TMP /tmp ext4 defaults 0 2" >> /etc/fstab
+
+# 8. Démonter les points temporaires
+umount /mnt/lvhome /mnt/lvvar /mnt/lvtmp
+
+# 9. Monter les nouveaux volumes
+mount /home
+mount /var
+mount /tmp
+
+echo "Configuration LVM terminée. Pense à redémarrer le système."
+
+exit 0
