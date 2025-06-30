@@ -3,7 +3,7 @@ autoinstall:
   identity:
     hostname: tuxor
     username: tech
-    password: "$6$rounds=4096$6swV9WZlT47q0zKx$Uy2aW/6ITLy4coymqmjJ4LwcoBRqz4gAVipNGnFNhfjvznPPEhTn1YiN8kGGzR6jKoapj8n0xRrJmu5Fv7VT7z0"
+    password: "$6$rounds=4096$6swV9WZlT47q0zKx$Uy2aW/6ITLy4coymqmjJ4LwcoBRq4gAVipNGnFNhfjvznPPEhTn1YiN8kGGzR6jKoapj8n0xRrJmu5Fv7VT7z0"
   locale: fr_FR.UTF-8
   keyboard:
     layout: fr
@@ -12,6 +12,7 @@ autoinstall:
     ethernets:
       eth0:
         dhcp4: true
+
   storage:
     config:
       - type: disk
@@ -36,7 +37,7 @@ autoinstall:
             flag: ''
       - type: physical_volume
         id: pv0
-        device: part-lvm
+        device: disk0-part-lvm
       - type: volume_group
         id: vg0
         name: vgubuntu
@@ -76,6 +77,7 @@ autoinstall:
         size: 9G
         volume_group: vg0
         fs_type: swap
+
   packages:
     - vim
     - glances
@@ -84,6 +86,7 @@ autoinstall:
     - git
     - open-vm-tools
     - open-vm-tools-desktop
+
   late-commands:
     - curtin in-target --target=/target -- apt-get update
     - curtin in-target --target=/target -- apt-get upgrade -y
